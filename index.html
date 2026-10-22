@@ -1,0 +1,204 @@
+<!DOCTYPE html>
+<html lang="ja">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
+<title>謎解きマーケット 購入リスト</title>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link href="https://fonts.googleapis.com/css2?family=Zen+Maru+Gothic:wght@400;500;700&display=swap" rel="stylesheet">
+<style>
+:root{--bg:#fff5f9;--card:#ffffff;--ink:#4a3b52;--sub:#9a86a3;--line:#f6d9e6;--accent:#ff7eb6;--accent-d:#e85a9b;--accent2:#ffe9f3;--lav:#ece6ff;--lav-d:#8a6fe0;--warn:#ff9a5c;--mint:#d9f7ec;--mint-d:#2f9e78;--shadow:0 6px 18px rgba(255,126,182,.18)}
+@media (prefers-color-scheme:dark){:root{--bg:#1d1822;--card:#2a2231;--ink:#fbeaf3;--sub:#b9a3c4;--line:#44344f;--accent:#ff8fc2;--accent-d:#ff8fc2;--accent2:#3b2a45;--lav:#34294f;--lav-d:#b9a3ff;--warn:#ffb084;--mint:#21382f;--mint-d:#7fe0b8;--shadow:0 6px 18px rgba(0,0,0,.35)}}
+*,*::before,*::after{box-sizing:border-box}
+body{margin:0;background:var(--bg);background-image:radial-gradient(var(--line) 1.5px,transparent 1.5px);background-size:22px 22px;color:var(--ink);font-family:"Zen Maru Gothic","Hiragino Maru Gothic ProN","Hiragino Sans",system-ui,sans-serif;line-height:1.55;padding:env(safe-area-inset-top,0) 0 env(safe-area-inset-bottom,0)}
+.wrap{max-width:720px;margin:0 auto;padding:16px}
+.hero{background:linear-gradient(135deg,#ff9ccb,#c3a6ff);color:#fff;border-radius:24px;padding:20px 18px;margin-bottom:16px;box-shadow:var(--shadow);position:relative;overflow:hidden}
+.hero::after{content:"🧩 ✨ 🔍";position:absolute;right:14px;top:10px;font-size:22px;opacity:.9;letter-spacing:4px}
+h1{font-size:22px;margin:0 0 4px;font-weight:700}
+.sub{font-size:13px;margin:0;opacity:.95}
+.card{background:var(--card);border:2px solid var(--line);border-radius:22px;padding:16px;margin-bottom:16px;box-shadow:var(--shadow)}
+.card>.pn:first-child{font-size:16px}
+label{display:block;font-size:12px;font-weight:700;color:var(--lav-d);margin:12px 0 5px}
+input,textarea,select{width:100%;font:inherit;font-size:16px;color:var(--ink);background:var(--bg);border:2px solid var(--line);border-radius:14px;padding:10px 12px;outline:none;transition:border-color .15s,box-shadow .15s}
+input:focus,textarea:focus,select:focus{border-color:var(--accent);box-shadow:0 0 0 4px var(--accent2)}
+textarea{min-height:84px;resize:vertical}
+.row{display:grid;grid-template-columns:1fr 1fr 1fr;gap:8px}.row2{display:grid;grid-template-columns:1fr 1fr;gap:8px}
+button{font:inherit;font-weight:700;font-size:15px;border:0;border-radius:99px;padding:10px 18px;cursor:pointer;background:linear-gradient(135deg,#ff8fc2,#ff6aa8);color:#fff;box-shadow:0 4px 10px rgba(255,106,168,.35);transition:transform .1s}
+button:active{transform:scale(.95)}
+button.ghost{background:var(--lav);color:var(--lav-d);box-shadow:none}
+.bar{display:flex;gap:8px;margin-top:14px;flex-wrap:wrap}
+.hint{font-size:12px;color:var(--sub);margin-top:6px}
+.sum{display:flex;justify-content:space-between;align-items:center;gap:8px;flex-wrap:wrap}
+.total{font-size:26px;font-weight:700;color:var(--accent-d)}
+.chips{display:flex;gap:6px;overflow-x:auto;padding-bottom:4px;margin:12px 0 8px}
+.chip{white-space:nowrap;background:var(--lav);color:var(--lav-d);border-radius:99px;padding:5px 14px;font-size:13px;font-weight:700;cursor:pointer}
+.chip.on{background:var(--lav-d);color:#fff}
+.item{border:2px dashed var(--line);border-radius:18px;padding:12px;margin-top:10px;background:var(--bg)}
+.item.done{background:var(--mint);border-color:var(--mint-d)}
+.item.done .pn{text-decoration:line-through;opacity:.55}
+.item.done .price::before{content:"✅ "}
+.pn{font-weight:700;font-size:16px}.meta{font-size:12px;color:var(--sub);margin-top:3px}
+.tag{display:inline-block;font-size:11px;font-weight:700;background:var(--accent);color:#fff;border-radius:99px;padding:1px 9px;margin-right:4px}
+.tag.booth{background:transparent;border:1.5px solid var(--warn);color:var(--warn)}
+.top{display:flex;justify-content:space-between;gap:10px}.price{font-weight:700;color:var(--accent-d);white-space:nowrap}
+.acts{display:flex;gap:6px;margin-top:10px}.acts input{padding:6px 10px;font-size:14px;flex:1;min-width:0}.acts button{padding:6px 12px;font-size:13px}
+.empty{color:var(--sub);text-align:center;padding:24px 0}
+.empty::before{content:"🔍";display:block;font-size:32px;margin-bottom:4px}
+.msg{background:var(--accent2);border:2px solid var(--accent);border-radius:16px;padding:14px;margin-bottom:14px;font-size:14px}
+[hidden]{display:none!important}
+</style>
+</head>
+<body>
+<div class="wrap">
+  <div class="hero"><h1>謎解きマーケット<br>おかいものリスト</h1>
+  <p class="sub">ポストから団体名・商品名をかんたん入力 ✿ ブースは地図が出てからね</p></div>
+  <div id="msg" class="msg" hidden></div>
+
+  <div id="start" class="card" hidden>
+    <div class="pn">はじめに</div>
+    <p class="hint">新しいリストを作って、URLを友人に送ると全員で同じリストを編集できます。</p>
+    <div class="bar"><button id="newList">🎀 新しいリストをつくる</button></div>
+  </div>
+
+  <div id="app" hidden>
+    <div class="card">
+      <label for="me">あなたの名前</label>
+      <input id="me" placeholder="例：たろう ♡" maxlength="20">
+      <label for="post">Xのポスト本文（コピペ）</label>
+      <textarea id="post" placeholder="ポストの文章を貼り付け"></textarea>
+      <div class="bar"><button id="ex" class="ghost">✨ ポストから抽出</button></div>
+      <div class="hint" id="exh"></div>
+      <div class="row2">
+        <div><label for="grp">団体名</label><input id="grp"></div>
+        <div><label for="pn">商品名</label><input id="pn"></div>
+      </div>
+      <div class="row">
+        <div><label for="pr">金額（円）</label><input id="pr" type="number" inputmode="numeric" min="0"></div>
+        <div><label for="qt">個数</label><input id="qt" type="number" inputmode="numeric" min="1" value="1"></div>
+        <div><label for="bt">ブース</label><input id="bt" placeholder="後で入力OK"></div>
+      </div>
+      <div class="bar"><button id="add">🛍 リストに追加</button><button id="share" class="ghost">🔗 URLをコピー</button></div>
+    </div>
+
+    <div class="card">
+      <div class="sum"><div><div class="hint" style="margin:0" id="cnt"></div><div class="total" id="tot">¥0</div></div>
+        <select id="sort" style="width:auto"><option value="t">追加順</option><option value="b">ブース順</option><option value="g">団体名順</option></select></div>
+      <div class="chips" id="chips"></div>
+      <div id="list"></div>
+    </div>
+  </div>
+</div>
+
+<script type="module">
+import { initializeApp } from "https://www.gstatic.com/firebasejs/10.12.2/firebase-app.js";
+import { getFirestore, collection, addDoc, doc, updateDoc, deleteDoc, onSnapshot } from "https://www.gstatic.com/firebasejs/10.12.2/firebase-firestore.js";
+
+/* ▼▼ ここにFirebaseの設定値を貼り付けてください ▼▼ */
+const firebaseConfig = {
+  apiKey: "AIzaSyAoIIJTrou8NBAsvDJD4vjMiyAD0Jv-sW4",
+  authDomain: "nazomarket2026.firebaseapp.com",
+  projectId: "nazomarket2026",
+  storageBucket: "nazomarket2026.firebasestorage.app",
+  messagingSenderId: "917844582639",
+  appId: "1:917844582639:web:064cf46fd054e5705efb1a"
+};
+/* ▲▲ ここまで ▲▲ */
+
+const $ = id => document.getElementById(id);
+const esc = s => String(s ?? "").replace(/[&<>"']/g, c => ({"&":"&amp;","<":"&lt;",">":"&gt;",'"':"&quot;","'":"&#39;"}[c]));
+const yen = n => "¥" + (Number(n) || 0).toLocaleString("ja-JP");
+const showMsg = t => { $("msg").textContent = t; $("msg").hidden = !t; };
+
+if (firebaseConfig.apiKey.startsWith("YOUR_")) {
+  showMsg("Firebaseの設定がまだです。index.html 上部の firebaseConfig に設定値を貼り付けてください。");
+  throw new Error("firebaseConfig not set");
+}
+const db = getFirestore(initializeApp(firebaseConfig));
+
+let listId = new URLSearchParams(location.search).get("r");
+let items = [], filter = "all";
+
+try { $("me").value = localStorage.getItem("me") || ""; } catch (e) {}
+$("me").addEventListener("input", () => { try { localStorage.setItem("me", $("me").value); } catch (e) {} });
+
+function newId() {
+  const a = new Uint8Array(10); crypto.getRandomValues(a);
+  return [...a].map(b => "abcdefghijkmnpqrstuvwxyz23456789"[b % 32]).join("");
+}
+$("newList").onclick = () => { location.search = "?r=" + newId(); };
+
+if (!listId) { $("start").hidden = false; }
+else {
+  $("app").hidden = false;
+  const col = collection(db, "lists", listId, "items");
+  onSnapshot(col, s => { items = s.docs.map(d => ({ id: d.id, ...d.data() })); render(); },
+    () => showMsg("データを読み込めませんでした。Firestoreの作成とルールの設定を確認してください。"));
+
+  $("add").onclick = async () => {
+    const who = $("me").value.trim();
+    if (!$("pn").value.trim()) { $("exh").textContent = "商品名を入力してください。"; return; }
+    if (!who) { $("exh").textContent = "あなたの名前を入力してください。"; return; }
+    try {
+      await addDoc(col, { who, group: $("grp").value.trim(), name: $("pn").value.trim(),
+        price: Number($("pr").value) || 0, qty: Math.max(1, Number($("qt").value) || 1),
+        booth: $("bt").value.trim(), done: false, post: $("post").value.trim(), t: Date.now() });
+      ["grp","pn","pr","bt","post"].forEach(k => $(k).value = ""); $("qt").value = 1; $("exh").textContent = "追加しました ✓";
+    } catch (e) { $("exh").textContent = "追加できませんでした。ルール設定を確認してください。"; }
+  };
+  const upd = (id, p) => updateDoc(doc(db, "lists", listId, "items", id), p).catch(() => showMsg("更新できませんでした。"));
+  $("list").onclick = e => {
+    const el = e.target.closest(".item"); if (!el) return;
+    const id = el.dataset.id, it = items.find(i => i.id === id);
+    if (e.target.closest(".sv")) upd(id, { booth: el.querySelector(".bi").value.trim() });
+    else if (e.target.closest(".dn")) upd(id, { done: !it.done });
+    else if (e.target.closest(".rm") && confirm("削除しますか？")) deleteDoc(doc(db, "lists", listId, "items", id)).catch(() => showMsg("削除できませんでした。"));
+  };
+}
+
+$("share").onclick = async () => {
+  try { await navigator.clipboard.writeText(location.href); $("exh").textContent = "URLをコピーしました。友人に送ってください。"; }
+  catch (e) { $("exh").textContent = location.href; }
+};
+
+/* ポストからの簡易抽出（ルールベース） */
+$("ex").onclick = () => {
+  const t = $("post").value.trim();
+  if (!t) { $("exh").textContent = "ポスト本文を貼り付けてください。"; return; }
+  const lines = t.split(/\n/).map(s => s.trim()).filter(s => s && !/^https?:/.test(s));
+  const acc = (t.match(/@[A-Za-z0-9_]+/) || [""])[0];
+  const grpM = t.match(/(?:団体名?|サークル名?|頒布元)\s*[:：]\s*(.+)/);
+  const prodM = t.match(/[「『](.+?)[」』]/) || t.match(/(?:商品名?|タイトル)\s*[:：]\s*(.+)/);
+  const priceM = t.match(/(?:[¥￥]\s*([\d,]+))|(?:([\d,]+)\s*円)/);
+  const boothM = t.match(/(?:ブース|booth|配置)\s*[:：]?\s*([A-Za-zＡ-Ｚ0-9０-９\-ー]+)/i);
+  $("grp").value = grpM ? grpM[1].trim() : (acc || "");
+  $("pn").value = prodM ? prodM[1].trim() : (lines[0] || "").slice(0, 40);
+  if (priceM) $("pr").value = (priceM[1] || priceM[2]).replace(/,/g, "");
+  if (boothM) $("bt").value = boothM[1];
+  $("exh").textContent = "抽出しました。内容を確認・修正してください。";
+};
+
+function render() {
+  const names = [...new Set(items.map(i => i.who).filter(Boolean))];
+  if (filter !== "all" && !names.includes(filter)) filter = "all";
+  $("chips").innerHTML = ["all", ...names].map(n => `<span class="chip ${n === filter ? "on" : ""}" data-n="${esc(n)}">${n === "all" ? "みんな" : esc(n)}</span>`).join("");
+  let v = items.filter(i => filter === "all" || i.who === filter);
+  const s = $("sort").value;
+  v.sort((a, b) => s === "b" ? String(a.booth || "~").localeCompare(String(b.booth || "~"), "ja", { numeric: true })
+    : s === "g" ? String(a.group).localeCompare(String(b.group), "ja") : (a.t || 0) - (b.t || 0));
+  const open = v.filter(i => !i.done);
+  $("tot").textContent = yen(open.reduce((a, i) => a + i.price * i.qty, 0));
+  $("cnt").textContent = `未購入の合計（${open.length}/${v.length}件）`;
+  $("list").innerHTML = v.length ? v.map(i => `<div class="item ${i.done ? "done" : ""}" data-id="${i.id}">
+    <div class="top"><div><div class="pn">${esc(i.name)}</div>
+    <div class="meta"><span class="tag">${esc(i.who)}</span>${esc(i.group) || "団体名なし"}　×${i.qty}</div>
+    <div class="meta"><span class="tag booth">${i.booth ? "📍 " + esc(i.booth) : "ブース未定"}</span></div></div>
+    <div class="price">${yen(i.price * i.qty)}</div></div>
+    <div class="acts"><input class="bi" placeholder="ブース場所" value="${esc(i.booth)}"><button class="ghost sv">保存</button>
+    <button class="ghost dn">${i.done ? "戻す" : "購入済"}</button><button class="ghost rm">🗑</button></div></div>`).join("") : `<div class="empty">まだ何もありません</div>`;
+}
+$("chips").onclick = e => { const c = e.target.closest(".chip"); if (c) { filter = c.dataset.n; render(); } };
+$("sort").onchange = render;
+render();
+</script>
+</body>
+</html>
