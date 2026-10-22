@@ -50,6 +50,8 @@ img.map{width:100%;height:auto;border-radius:16px;border:2px solid var(--line);m
 details{margin-top:14px;background:var(--bg);border:2px dashed var(--line);border-radius:16px;padding:10px 12px}
 summary{cursor:pointer;font-weight:700;font-size:14px;color:var(--lav-d)}
 .bhit{display:flex;justify-content:space-between;gap:8px;padding:6px 0;border-top:1px dashed var(--line);font-size:14px;color:var(--ink)}
+.tag.p1{background:#ff5c8a;color:#fff}.tag.p2{background:var(--lav);color:var(--lav-d)}.tag.p3{background:var(--line);color:var(--sub)}
+select.pi{width:auto;padding:6px 8px;font-size:13px;border-radius:99px}
 [hidden]{display:none!important}
 </style>
 </head>
@@ -79,6 +81,8 @@ summary{cursor:pointer;font-weight:700;font-size:14px;color:var(--lav-d)}
         <div><label for="qt">個数</label><input id="qt" type="number" inputmode="numeric" min="1" value="1"></div>
         <div><label for="bt">ブース</label><input id="bt" placeholder="後で入力OK"></div>
       </div>
+      <label for="pri">優先度</label>
+      <select id="pri"><option value="1">★★★ 絶対ほしい</option><option value="2" selected>★★ ほしい</option><option value="3">★ 余裕があれば</option></select>
       <label for="url">公式ポストのURL（保存用）</label>
       <input id="url" type="url" inputmode="url" placeholder="https://x.com/...">
       <div class="bar"><button id="add">🛍 リストに追加</button><button id="share" class="ghost">🔗 URLをコピー</button></div>
@@ -86,7 +90,7 @@ summary{cursor:pointer;font-weight:700;font-size:14px;color:var(--lav-d)}
 
     <div class="card">
       <div class="sum"><div><div class="hint" style="margin:0" id="cnt"></div><div class="total" id="tot">¥0</div></div>
-        <select id="sort" style="width:auto"><option value="t">追加順</option><option value="b">ブース順</option><option value="g">団体名順</option></select></div>
+        <select id="sort" style="width:auto"><option value="p">優先度順</option><option value="t">追加順</option><option value="b">ブース順</option><option value="g">団体名順</option><option value="m">金額が高い順</option></select></div>
       <div class="chips" id="chips"></div>
       <div id="list"></div>
     </div>
@@ -164,11 +168,15 @@ else {
     try {
       await addDoc(col, { who, group: $("grp").value.trim(), name: $("pn").value.trim(),
         price: Number($("pr").value) || 0, qty: Math.max(1, Number($("qt").value) || 1),
-        booth: $("bt").value.trim(), url: $("url").value.trim(), done: false, t: Date.now() });
-      ["grp","pn","pr","bt","url"].forEach(k => $(k).value = ""); $("qt").value = 1; autoVal = ""; resetGrp(); $("exh").textContent = "追加しました ✓";
+        booth: $("bt").value.trim(), url: $("url").value.trim(), pri: Number($("pri").value) || 2, done: false, t: Date.now() });
+      ["grp","pn","pr","bt","url"].forEach(k => $(k).value = ""); $("qt").value = 1; autoVal = ""; $("pri").value = "2"; resetGrp(); $("exh").textContent = "追加しました ✓";
     } catch (e) { $("exh").textContent = "追加できませんでした。ルール設定を確認してください。"; }
   };
   const upd = (id, p) => updateDoc(doc(db, "lists", listId, "items", id), p).catch(() => showMsg("更新できませんでした。"));
+  $("list").onchange = e => {
+    const el = e.target.closest(".item");
+    if (el && e.target.classList.contains("pi")) upd(el.dataset.id, { pri: Number(e.target.value) });
+  };
   $("list").onclick = e => {
     const el = e.target.closest(".item"); if (!el) return;
     const id = el.dataset.id, it = items.find(i => i.id === id);
@@ -195,20 +203,26 @@ function render() {
   $("chips").innerHTML = ["all", ...names].map(n => `<span class="chip ${n === filter ? "on" : ""}" data-n="${esc(n)}">${n === "all" ? "みんな" : esc(n)}</span>`).join("");
   let v = items.filter(i => filter === "all" || i.who === filter);
   const s = $("sort").value;
-  v.sort((a, b) => s === "b" ? String(a.booth || "~").localeCompare(String(b.booth || "~"), "ja", { numeric: true })
-    : s === "g" ? String(a.group).localeCompare(String(b.group), "ja") : (a.t || 0) - (b.t || 0));
+  const pr = x => x.pri || 2, bc = (a, b) => String(a.booth || "~").localeCompare(String(b.booth || "~"), "ja", { numeric: true });
+  v.sort((a, b) => {
+    if (s === "p") return (a.done - b.done) || (pr(a) - pr(b)) || bc(a, b);
+    if (s === "b") return bc(a, b);
+    if (s === "g") return String(a.group).localeCompare(String(b.group), "ja");
+    if (s === "m") return (b.price * b.qty) - (a.price * a.qty);
+    return (a.t || 0) - (b.t || 0);
+  });
   const open = v.filter(i => !i.done);
   $("tot").textContent = yen(open.reduce((a, i) => a + i.price * i.qty, 0));
   $("cnt").textContent = `未購入の合計（${open.length}/${v.length}件）`;
   $("list").innerHTML = v.length ? v.map(i => `<div class="item ${i.done ? "done" : ""}" data-id="${i.id}">
     <div class="top"><div><div class="pn">${esc(i.name)}</div>
-    <div class="meta"><span class="tag">${esc(i.who)}</span>${esc(i.group) || "団体名なし"}　×${i.qty}</div>
+    <div class="meta"><span class="tag p${i.pri || 2}">${["", "★★★ 最優先", "★★ ふつう", "★ 余裕あれば"][i.pri || 2]}</span><span class="tag">${esc(i.who)}</span>${esc(i.group) || "団体名なし"}　×${i.qty}</div>
     ${safeUrl(i.url) ? `<div class="meta"><a href="${esc(safeUrl(i.url))}" target="_blank" rel="noopener" style="color:var(--lav-d);font-weight:700">🔗 公式ポストを開く</a></div>` : ""}
     <div class="meta"><span class="tag booth">${i.booth ? "📍 " + esc(i.booth) : (findBooth(i.group) ? "候補 📍 " + esc(findBooth(i.group)) : "ブース未定")}</span></div></div>
     <div class="price">${yen(i.price * i.qty)}</div></div>
     <div class="acts"><input class="bi" placeholder="ブース場所" value="${esc(i.booth)}"><button class="ghost sv">保存</button>
     <button class="ghost dn">${i.done ? "戻す" : "購入済"}</button><button class="ghost rm">🗑</button></div>
-    <div class="acts"><input class="ui" type="url" placeholder="公式ポストのURL" value="${esc(i.url)}"><button class="ghost su">URL保存</button></div></div>`).join("") : `<div class="empty">まだ何もありません</div>`;
+    <div class="acts"><select class="pi"><option value="1"${(i.pri || 2) == 1 ? " selected" : ""}>★★★</option><option value="2"${(i.pri || 2) == 2 ? " selected" : ""}>★★</option><option value="3"${(i.pri || 2) == 3 ? " selected" : ""}>★</option></select><input class="ui" type="url" placeholder="公式ポストのURL" value="${esc(i.url)}"><button class="ghost su">URL保存</button></div></div>`).join("") : `<div class="empty">まだ何もありません</div>`;
   fillGroups();
 }
 $("chips").onclick = e => { const c = e.target.closest(".chip"); if (c) { filter = c.dataset.n; render(); } };
