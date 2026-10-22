@@ -45,13 +45,18 @@ button.ghost{background:var(--lav);color:var(--lav-d);box-shadow:none}
 .empty{color:var(--sub);text-align:center;padding:24px 0}
 .empty::before{content:"🔍";display:block;font-size:32px;margin-bottom:4px}
 .msg{background:var(--accent2);border:2px solid var(--accent);border-radius:16px;padding:14px;margin-bottom:14px;font-size:14px}
+a.btn{display:inline-block;font-weight:700;font-size:14px;border-radius:99px;padding:9px 16px;background:var(--lav);color:var(--lav-d);text-decoration:none}
+img.map{width:100%;height:auto;border-radius:16px;border:2px solid var(--line);margin-top:10px;display:block}
+details{margin-top:14px;background:var(--bg);border:2px dashed var(--line);border-radius:16px;padding:10px 12px}
+summary{cursor:pointer;font-weight:700;font-size:14px;color:var(--lav-d)}
+.bhit{display:flex;justify-content:space-between;gap:8px;padding:6px 0;border-top:1px dashed var(--line);font-size:14px;color:var(--ink)}
 [hidden]{display:none!important}
 </style>
 </head>
 <body>
 <div class="wrap">
   <div class="hero"><h1>謎解きマーケット<br>おかいものリスト</h1>
-  <p class="sub">ポストから団体名・商品名をかんたん入力 ✿ ブースは地図が出てからね</p></div>
+  <p class="sub">団体名・商品名・ブースをみんなでチェック ✿</p></div>
   <div id="msg" class="msg" hidden></div>
 
   <div id="start" class="card" hidden>
@@ -64,9 +69,6 @@ button.ghost{background:var(--lav);color:var(--lav-d);box-shadow:none}
     <div class="card">
       <label for="me">あなたの名前</label>
       <input id="me" placeholder="例：たろう ♡" maxlength="20">
-      <label for="post">Xのポスト本文（コピペ）</label>
-      <textarea id="post" placeholder="ポストの文章を貼り付け"></textarea>
-      <div class="bar"><button id="ex" class="ghost">✨ ポストから抽出</button></div>
       <div class="hint" id="exh"></div>
       <div class="row2">
         <div><label for="grp">団体名</label><input id="grp"></div>
@@ -77,6 +79,8 @@ button.ghost{background:var(--lav);color:var(--lav-d);box-shadow:none}
         <div><label for="qt">個数</label><input id="qt" type="number" inputmode="numeric" min="1" value="1"></div>
         <div><label for="bt">ブース</label><input id="bt" placeholder="後で入力OK"></div>
       </div>
+      <label for="url">公式ポストのURL（保存用）</label>
+      <input id="url" type="url" inputmode="url" placeholder="https://x.com/...">
       <div class="bar"><button id="add">🛍 リストに追加</button><button id="share" class="ghost">🔗 URLをコピー</button></div>
     </div>
 
@@ -86,12 +90,32 @@ button.ghost{background:var(--lav);color:var(--lav-d);box-shadow:none}
       <div class="chips" id="chips"></div>
       <div id="list"></div>
     </div>
+    <div class="card" id="mapCard">
+      <div class="pn">🗺 会場マップ</div>
+      <a href="https://www.scrapmagazine.com/s/nazomarket/img/top/map_2026.jpg" target="_blank" rel="noopener">
+        <img class="map" src="https://www.scrapmagazine.com/s/nazomarket/img/top/map_2026.jpg" alt="会場内マップ" loading="lazy">
+      </a>
+      <div class="hint">タップで拡大できます。出典：ナゾトキマーケット公式サイト</div>
+      <div class="bar"><a class="btn" href="https://www.scrapmagazine.com/s/nazomarket/booth/" target="_blank" rel="noopener">📋 公式ブース一覧を開く</a></div>
+
+      <label for="bsearch">団体名からブースを探す</label>
+      <input id="bsearch" placeholder="団体名を入力">
+      <div id="bres"></div>
+
+      <details>
+        <summary>ブース一覧を取り込む（全員で共有）</summary>
+        <p class="hint">公式のブース一覧から「ブース番号　団体名」をコピーして、1行ずつ貼り付けてください。</p>
+        <textarea id="bimp" placeholder="例）&#10;A-12 ○○団体&#10;B-03 △△制作室"></textarea>
+        <div class="bar"><button id="bsave">取り込む</button><button id="bfill" class="ghost">リストのブースを自動入力</button></div>
+        <div class="hint" id="bst"></div>
+      </details>
+    </div>
   </div>
 </div>
 
 <script type="module">
 import { initializeApp } from "https://www.gstatic.com/firebasejs/10.12.2/firebase-app.js";
-import { getFirestore, collection, addDoc, doc, updateDoc, deleteDoc, onSnapshot } from "https://www.gstatic.com/firebasejs/10.12.2/firebase-firestore.js";
+import { getFirestore, collection, addDoc, doc, setDoc, updateDoc, deleteDoc, onSnapshot } from "https://www.gstatic.com/firebasejs/10.12.2/firebase-firestore.js";
 
 /* ▼▼ ここにFirebaseの設定値を貼り付けてください ▼▼ */
 const firebaseConfig = {
@@ -116,7 +140,7 @@ if (firebaseConfig.apiKey.startsWith("YOUR_")) {
 const db = getFirestore(initializeApp(firebaseConfig));
 
 let listId = new URLSearchParams(location.search).get("r");
-let items = [], filter = "all";
+let items = [], filter = "all", boothList = [];
 
 try { $("me").value = localStorage.getItem("me") || ""; } catch (e) {}
 $("me").addEventListener("input", () => { try { localStorage.setItem("me", $("me").value); } catch (e) {} });
@@ -141,8 +165,8 @@ else {
     try {
       await addDoc(col, { who, group: $("grp").value.trim(), name: $("pn").value.trim(),
         price: Number($("pr").value) || 0, qty: Math.max(1, Number($("qt").value) || 1),
-        booth: $("bt").value.trim(), done: false, post: $("post").value.trim(), t: Date.now() });
-      ["grp","pn","pr","bt","post"].forEach(k => $(k).value = ""); $("qt").value = 1; $("exh").textContent = "追加しました ✓";
+        booth: $("bt").value.trim(), url: $("url").value.trim(), done: false, t: Date.now() });
+      ["grp","pn","pr","bt","url"].forEach(k => $(k).value = ""); $("qt").value = 1; $("exh").textContent = "追加しました ✓";
     } catch (e) { $("exh").textContent = "追加できませんでした。ルール設定を確認してください。"; }
   };
   const upd = (id, p) => updateDoc(doc(db, "lists", listId, "items", id), p).catch(() => showMsg("更新できませんでした。"));
@@ -150,6 +174,7 @@ else {
     const el = e.target.closest(".item"); if (!el) return;
     const id = el.dataset.id, it = items.find(i => i.id === id);
     if (e.target.closest(".sv")) upd(id, { booth: el.querySelector(".bi").value.trim() });
+    else if (e.target.closest(".su")) upd(id, { url: el.querySelector(".ui").value.trim() });
     else if (e.target.closest(".dn")) upd(id, { done: !it.done });
     else if (e.target.closest(".rm") && confirm("削除しますか？")) deleteDoc(doc(db, "lists", listId, "items", id)).catch(() => showMsg("削除できませんでした。"));
   };
@@ -160,34 +185,7 @@ $("share").onclick = async () => {
   catch (e) { $("exh").textContent = location.href; }
 };
 
-/* ポストからの簡易抽出（ルールベース） */
-$("ex").onclick = () => {
-  const raw = $("post").value.trim();
-  if (!raw) { $("exh").textContent = "ポスト本文を貼り付けてください。"; return; }
-  const urlUser = (raw.match(/(?:x|twitter)\.com\/([A-Za-z0-9_]+)\/status/) || [])[1];
-  const t = raw.replace(/https?:\/\/\S+/g, "").trim();
-  const lines = t.split(/\n/).map(s => s.trim()).filter(Boolean);
-  const mention = (t.match(/@[A-Za-z0-9_]+/) || [""])[0];
-  const acc = mention || (urlUser ? "@" + urlUser : "");
-  const generic = /^(新刊|新作|新商品|頒布|告知|お品書き|おしながき|通販|予約|発売|参加|ブース|情報|お知らせ|拡散|RT|謎解き|謎解きマーケット|当日|事前)/;
-  const grpM = t.match(/(?:団体名?|サークル名?|頒布元|出展者?)\s*[:：]\s*(.+)/);
-  const labelProd = t.match(/(?:商品名?|タイトル|作品名?)\s*[:：]\s*(.+)/);
-  const quoted = t.match(/[「『](.+?)[」』]/);
-  const bracket = [...t.matchAll(/【(.+?)】/g)].map(m => m[1]).find(x => !generic.test(x));
-  const firstLine = (lines.find(l => !/^[#@]/.test(l)) || "").replace(/^[【\[].*?[】\]]\s*/, "");
-  const priceM = t.match(/(?:[¥￥]\s*([\d,]+))|(?:([\d,]+)\s*円)/);
-  const boothM = t.match(/(?:ブース|booth|配置|スペース)\s*[:：]?\s*([A-Za-zＡ-Ｚ0-9０-９\-ー]+)/i) || t.match(/\b([A-Za-zあ-ん]{1,2}[-ー]\d{1,3})\b/);
-  const prod = (quoted && quoted[1]) || (labelProd && labelProd[1]) || bracket || firstLine;
-  $("grp").value = grpM ? grpM[1].trim() : acc;
-  $("pn").value = (prod || "").trim().slice(0, 50);
-  if (priceM) $("pr").value = (priceM[1] || priceM[2]).replace(/,/g, "");
-  if (boothM) $("bt").value = boothM[1];
-  const only = !t && urlUser;
-  $("exh").textContent = only
-    ? "URLだけでは本文を読めないため、ユーザー名のみ入れました。ポストの文章もコピーして貼ると、商品名も取れます。"
-    : "抽出しました。内容を確認・修正してください。";
-};
-
+function safeUrl(u) { u = String(u || "").trim(); return /^https?:\/\//i.test(u) ? u : ""; }
 function render() {
   const names = [...new Set(items.map(i => i.who).filter(Boolean))];
   if (filter !== "all" && !names.includes(filter)) filter = "all";
@@ -202,13 +200,77 @@ function render() {
   $("list").innerHTML = v.length ? v.map(i => `<div class="item ${i.done ? "done" : ""}" data-id="${i.id}">
     <div class="top"><div><div class="pn">${esc(i.name)}</div>
     <div class="meta"><span class="tag">${esc(i.who)}</span>${esc(i.group) || "団体名なし"}　×${i.qty}</div>
-    <div class="meta"><span class="tag booth">${i.booth ? "📍 " + esc(i.booth) : "ブース未定"}</span></div></div>
+    ${safeUrl(i.url) ? `<div class="meta"><a href="${esc(safeUrl(i.url))}" target="_blank" rel="noopener" style="color:var(--lav-d);font-weight:700">🔗 公式ポストを開く</a></div>` : ""}
+    <div class="meta"><span class="tag booth">${i.booth ? "📍 " + esc(i.booth) : (findBooth(i.group) ? "候補 📍 " + esc(findBooth(i.group)) : "ブース未定")}</span></div></div>
     <div class="price">${yen(i.price * i.qty)}</div></div>
     <div class="acts"><input class="bi" placeholder="ブース場所" value="${esc(i.booth)}"><button class="ghost sv">保存</button>
-    <button class="ghost dn">${i.done ? "戻す" : "購入済"}</button><button class="ghost rm">🗑</button></div></div>`).join("") : `<div class="empty">まだ何もありません</div>`;
+    <button class="ghost dn">${i.done ? "戻す" : "購入済"}</button><button class="ghost rm">🗑</button></div>
+    <div class="acts"><input class="ui" type="url" placeholder="公式ポストのURL" value="${esc(i.url)}"><button class="ghost su">URL保存</button></div></div>`).join("") : `<div class="empty">まだ何もありません</div>`;
 }
 $("chips").onclick = e => { const c = e.target.closest(".chip"); if (c) { filter = c.dataset.n; render(); } };
 $("sort").onchange = render;
+
+/* ---- ブース一覧（団体名→ブース） ---- */
+const nz = s => String(s || "").normalize("NFKC").toLowerCase().replace(/[\s・\-ー_【】「」『』()\[\]!?@.,。、]/g, "");
+const BRE = "[A-Za-z]{0,2}[-ー－‐]?\\d{1,3}(?:[-ー－‐]\\d{1,3})?";
+function parseBooths(text) {
+  const out = [], only = new RegExp("^" + BRE + "$"), head = new RegExp("^(" + BRE + ")[\\s:：]+(.+)$"), tail = new RegExp("^(.+?)[\\s:：]+(" + BRE + ")$");
+  for (let line of text.split(/\n/)) {
+    line = line.normalize("NFKC").trim(); if (!line) continue;
+    let booth = "", name = "";
+    const parts = line.split(/\t|,|，/).map(x => x.trim()).filter(Boolean);
+    if (parts.length >= 2) { const bi = parts.findIndex(x => only.test(x)); if (bi >= 0) { booth = parts[bi]; name = parts.filter((_, k) => k !== bi).join(" "); } }
+    if (!booth) { let m = line.match(head); if (m) { booth = m[1]; name = m[2]; } else { m = line.match(tail); if (m) { name = m[1]; booth = m[2]; } } }
+    if (booth && name) out.push({ name: name.trim(), booth });
+  }
+  return out;
+}
+function findBooth(g) {
+  const k = nz(g); if (k.length < 2) return "";
+  const hit = boothList.find(b => nz(b.name) === k) || boothList.find(b => { const n = nz(b.name); return n.length >= 2 && (n.includes(k) || k.includes(n)); });
+  return hit ? hit.booth : "";
+}
+function autoBooth() {
+  const b = findBooth($("grp").value);
+  if (b && !$("bt").value) { $("bt").value = b; $("exh").textContent = "ブース " + b + " を自動入力しました。"; }
+}
+$("grp").addEventListener("change", autoBooth);
+
+if (listId) {
+  const bref = doc(db, "lists", listId, "booths", "map");
+  try { boothList = JSON.parse(localStorage.getItem("booths:" + listId) || "[]"); } catch (e) {}
+  onSnapshot(bref, s => {
+    if (s.exists()) { try { boothList = JSON.parse(s.data().json || "[]"); localStorage.setItem("booths:" + listId, s.data().json); } catch (e) {} }
+    render(); searchBooth();
+  }, () => {});
+
+  function searchBooth() {
+    const k = nz($("bsearch").value);
+    if (!k) { $("bres").innerHTML = boothList.length ? `<div class="hint">${boothList.length}団体のブース情報があります。</div>` : `<div class="hint">ブース一覧が未登録です。下の「取り込む」から登録してください。</div>`; return; }
+    const hits = boothList.filter(b => nz(b.name).includes(k)).slice(0, 8);
+    $("bres").innerHTML = hits.length ? hits.map(b => `<div class="bhit"><span>${esc(b.name)}</span><b>📍 ${esc(b.booth)}</b></div>`).join("") : `<div class="hint">見つかりませんでした。</div>`;
+  }
+  $("bsearch").addEventListener("input", searchBooth);
+
+  $("bsave").onclick = async () => {
+    const add = parseBooths($("bimp").value);
+    if (!add.length) { $("bst").textContent = "読み取れませんでした。「ブース番号 団体名」を1行ずつ貼ってください。"; return; }
+    const m = new Map(boothList.map(b => [nz(b.name), b])); add.forEach(b => m.set(nz(b.name), b));
+    boothList = [...m.values()];
+    const json = JSON.stringify(boothList);
+    try { localStorage.setItem("booths:" + listId, json); } catch (e) {}
+    try { await setDoc(bref, { json, t: Date.now() }); $("bst").textContent = add.length + "件を取り込みました（共有済み）。"; }
+    catch (e) { $("bst").textContent = add.length + "件を取り込みました（この端末のみ。Firestoreのルールを更新すると共有できます）。"; }
+    $("bimp").value = ""; render(); searchBooth();
+  };
+  $("bfill").onclick = async () => {
+    let n = 0;
+    for (const i of items) { if (!i.booth) { const b = findBooth(i.group); if (b) { await updateDoc(doc(db, "lists", listId, "items", i.id), { booth: b }).catch(() => {}); n++; } } }
+    $("bst").textContent = n ? n + "件のブースを入力しました。" : "当てはまる団体が見つかりませんでした。";
+  };
+  searchBooth();
+}
+
 render();
 </script>
 </body>
