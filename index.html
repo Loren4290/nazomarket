@@ -71,7 +71,7 @@ summary{cursor:pointer;font-weight:700;font-size:14px;color:var(--lav-d)}
       <input id="me" placeholder="例：たろう ♡" maxlength="20">
       <div class="hint" id="exh"></div>
       <div class="row2">
-        <div><label for="grp">団体名</label><input id="grp" list="grplist" placeholder="選択 or 入力"><datalist id="grplist"></datalist></div>
+        <div><label for="grpsel">団体名</label><select id="grpsel"><option value="">団体名を選択</option></select><input id="grp" placeholder="団体名を入力" hidden style="margin-top:6px"></div>
         <div><label for="pn">商品名</label><input id="pn"></div>
       </div>
       <div class="row">
@@ -165,7 +165,7 @@ else {
       await addDoc(col, { who, group: $("grp").value.trim(), name: $("pn").value.trim(),
         price: Number($("pr").value) || 0, qty: Math.max(1, Number($("qt").value) || 1),
         booth: $("bt").value.trim(), url: $("url").value.trim(), done: false, t: Date.now() });
-      ["grp","pn","pr","bt","url"].forEach(k => $(k).value = ""); $("qt").value = 1; autoVal = ""; $("exh").textContent = "追加しました ✓";
+      ["grp","pn","pr","bt","url"].forEach(k => $(k).value = ""); $("qt").value = 1; autoVal = ""; resetGrp(); $("exh").textContent = "追加しました ✓";
     } catch (e) { $("exh").textContent = "追加できませんでした。ルール設定を確認してください。"; }
   };
   const upd = (id, p) => updateDoc(doc(db, "lists", listId, "items", id), p).catch(() => showMsg("更新できませんでした。"));
@@ -259,7 +259,17 @@ $("bq").addEventListener("input", renderBoothList);
 function fillGroups() {
   const names = BOOTHS.map(x => x.n);
   const extra = [...new Set(items.map(i => i.group).filter(g => g && !bnames.some(x => x.k === nz(g))))];
-  $("grplist").innerHTML = [...names, ...extra].map(g => `<option value="${esc(g)}">`).join("");
+  const manual = !$("grp").hidden, cur2 = $("grpsel").value;
+  let g = '<option value="">団体名を選択</option><option value="__new">✏️ 一覧にない団体（手入力）</option>', ar = "";
+  for (const x of BOOTHS) {
+    if (x.a !== ar) { if (ar) g += "</optgroup>"; g += `<optgroup label="${esc(x.a)}">`; ar = x.a; }
+    g += `<option value="${esc(x.n)}">${esc(x.n)}（${esc(x.b)}）</option>`;
+  }
+  g += "</optgroup>";
+  if (extra.length) g += '<optgroup label="登録済み（一覧外）">' + extra.map(n => `<option value="${esc(n)}">${esc(n)}</option>`).join("") + "</optgroup>";
+  $("grpsel").innerHTML = g;
+  $("grpsel").value = manual ? "__new" : cur2;
+  if ($("grpsel").value !== (manual ? "__new" : cur2)) $("grpsel").value = "";
   const cur = $("bsel").value;
   let h = '<option value="">団体名を選択</option>', area = "";
   for (const x of BOOTHS) {
@@ -272,6 +282,13 @@ function fillGroups() {
   showBooth(); renderBoothList();
 }
 $("bsel").onchange = showBooth;
+$("grpsel").onchange = () => {
+  const v = $("grpsel").value;
+  if (v === "__new") { $("grp").hidden = false; $("grp").value = ""; $("grp").focus(); return; }
+  $("grp").hidden = true; $("grp").value = v;
+  if (v) autoBooth(true);
+};
+function resetGrp() { $("grpsel").value = ""; $("grp").hidden = true; $("grp").value = ""; }
 
 render();
 </script>
