@@ -71,7 +71,7 @@ summary{cursor:pointer;font-weight:700;font-size:14px;color:var(--lav-d)}
       <input id="me" placeholder="例：たろう ♡" maxlength="20">
       <div class="hint" id="exh"></div>
       <div class="row2">
-        <div><label for="grp">団体名</label><input id="grp"></div>
+        <div><label for="grp">団体名</label><input id="grp" list="grplist" placeholder="選択 or 入力"><datalist id="grplist"></datalist></div>
         <div><label for="pn">商品名</label><input id="pn"></div>
       </div>
       <div class="row">
@@ -98,17 +98,16 @@ summary{cursor:pointer;font-weight:700;font-size:14px;color:var(--lav-d)}
       <div class="hint">タップで拡大できます。出典：ナゾトキマーケット公式サイト</div>
       <div class="bar"><a class="btn" href="https://www.scrapmagazine.com/s/nazomarket/booth/" target="_blank" rel="noopener">📋 公式ブース一覧を開く</a></div>
 
-      <label for="bsearch">団体名からブースを探す</label>
-      <input id="bsearch" placeholder="団体名を入力">
+      <label for="bsel">団体名からブースを探す</label>
+      <select id="bsel"><option value="">団体名を選択</option></select>
       <div id="bres"></div>
 
       <details>
-        <summary>ブース一覧を取り込む（全員で共有）</summary>
-        <p class="hint">公式のブース一覧から「ブース番号　団体名」をコピーして、1行ずつ貼り付けてください。</p>
-        <textarea id="bimp" placeholder="例）&#10;A-12 ○○団体&#10;B-03 △△制作室"></textarea>
-        <div class="bar"><button id="bsave">取り込む</button><button id="bfill" class="ghost">リストのブースを自動入力</button></div>
-        <div class="hint" id="bst"></div>
+        <summary id="bsum">📋 ブース一覧</summary>
+        <input id="bq" placeholder="団体名・ブース番号で絞り込み" style="margin-top:10px">
+        <div id="blist"></div>
       </details>
+
     </div>
   </div>
 </div>
@@ -140,7 +139,7 @@ if (firebaseConfig.apiKey.startsWith("YOUR_")) {
 const db = getFirestore(initializeApp(firebaseConfig));
 
 let listId = new URLSearchParams(location.search).get("r");
-let items = [], filter = "all", boothList = [];
+let items = [], filter = "all";
 
 try { $("me").value = localStorage.getItem("me") || ""; } catch (e) {}
 $("me").addEventListener("input", () => { try { localStorage.setItem("me", $("me").value); } catch (e) {} });
@@ -166,14 +165,18 @@ else {
       await addDoc(col, { who, group: $("grp").value.trim(), name: $("pn").value.trim(),
         price: Number($("pr").value) || 0, qty: Math.max(1, Number($("qt").value) || 1),
         booth: $("bt").value.trim(), url: $("url").value.trim(), done: false, t: Date.now() });
-      ["grp","pn","pr","bt","url"].forEach(k => $(k).value = ""); $("qt").value = 1; $("exh").textContent = "追加しました ✓";
+      ["grp","pn","pr","bt","url"].forEach(k => $(k).value = ""); $("qt").value = 1; autoVal = ""; $("exh").textContent = "追加しました ✓";
     } catch (e) { $("exh").textContent = "追加できませんでした。ルール設定を確認してください。"; }
   };
   const upd = (id, p) => updateDoc(doc(db, "lists", listId, "items", id), p).catch(() => showMsg("更新できませんでした。"));
   $("list").onclick = e => {
     const el = e.target.closest(".item"); if (!el) return;
     const id = el.dataset.id, it = items.find(i => i.id === id);
-    if (e.target.closest(".sv")) upd(id, { booth: el.querySelector(".bi").value.trim() });
+    if (e.target.closest(".sv")) {
+      const bv = el.querySelector(".bi").value.trim(), k = nz(it.group);
+      const same = k ? items.filter(x => nz(x.group) === k) : [it];
+      same.forEach(x => upd(x.id, { booth: bv }));
+    }
     else if (e.target.closest(".su")) upd(id, { url: el.querySelector(".ui").value.trim() });
     else if (e.target.closest(".dn")) upd(id, { done: !it.done });
     else if (e.target.closest(".rm") && confirm("削除しますか？")) deleteDoc(doc(db, "lists", listId, "items", id)).catch(() => showMsg("削除できませんでした。"));
@@ -206,70 +209,69 @@ function render() {
     <div class="acts"><input class="bi" placeholder="ブース場所" value="${esc(i.booth)}"><button class="ghost sv">保存</button>
     <button class="ghost dn">${i.done ? "戻す" : "購入済"}</button><button class="ghost rm">🗑</button></div>
     <div class="acts"><input class="ui" type="url" placeholder="公式ポストのURL" value="${esc(i.url)}"><button class="ghost su">URL保存</button></div></div>`).join("") : `<div class="empty">まだ何もありません</div>`;
+  fillGroups();
 }
 $("chips").onclick = e => { const c = e.target.closest(".chip"); if (c) { filter = c.dataset.n; render(); } };
 $("sort").onchange = render;
 
-/* ---- ブース一覧（団体名→ブース） ---- */
-const nz = s => String(s || "").normalize("NFKC").toLowerCase().replace(/[\s・\-ー_【】「」『』()\[\]!?@.,。、]/g, "");
-const BRE = "[A-Za-z]{0,2}[-ー－‐]?\\d{1,3}(?:[-ー－‐]\\d{1,3})?";
-function parseBooths(text) {
-  const out = [], only = new RegExp("^" + BRE + "$"), head = new RegExp("^(" + BRE + ")[\\s:：]+(.+)$"), tail = new RegExp("^(.+?)[\\s:：]+(" + BRE + ")$");
-  for (let line of text.split(/\n/)) {
-    line = line.normalize("NFKC").trim(); if (!line) continue;
-    let booth = "", name = "";
-    const parts = line.split(/\t|,|，/).map(x => x.trim()).filter(Boolean);
-    if (parts.length >= 2) { const bi = parts.findIndex(x => only.test(x)); if (bi >= 0) { booth = parts[bi]; name = parts.filter((_, k) => k !== bi).join(" "); } }
-    if (!booth) { let m = line.match(head); if (m) { booth = m[1]; name = m[2]; } else { m = line.match(tail); if (m) { name = m[1]; booth = m[2]; } } }
-    if (booth && name) out.push({ name: name.trim(), booth });
+/* ---- ブース一覧データ（公式） ---- */
+const BOOTHS = [{"b": "A1", "n": "Machihack！", "a": "Aブース"}, {"b": "A2", "n": "よだかのレコード", "a": "Aブース"}, {"b": "A3", "n": "SCRAP", "a": "Aブース"}, {"b": "A4", "n": "タンブルウィード", "a": "Aブース"}, {"b": "A5", "n": "トキキル", "a": "Aブース"}, {"b": "A6", "n": "RIDDLER", "a": "Aブース"}, {"b": "A7", "n": "YTE", "a": "Aブース"}, {"b": "Ba1", "n": "ナゾトキマーケット", "a": "Ba・Bbブース"}, {"b": "Ba2", "n": "エフェックス / アットビ", "a": "Ba・Bbブース"}, {"b": "Ba3", "n": "グループSNE", "a": "Ba・Bbブース"}, {"b": "Ba4", "n": "ナゾトキゼペッツ", "a": "Ba・Bbブース"}, {"b": "Ba5", "n": "空空-karakara-", "a": "Ba・Bbブース"}, {"b": "Ba6", "n": "KAGENAZO", "a": "Ba・Bbブース"}, {"b": "Ba7", "n": "ねずみの巣", "a": "Ba・Bbブース"}, {"b": "Bb1", "n": "ヰ空間", "a": "Ba・Bbブース"}, {"b": "Bb2", "n": "XEOXY", "a": "Ba・Bbブース"}, {"b": "Bb3", "n": "ファーニャー（Far&Near）", "a": "Ba・Bbブース"}, {"b": "Bb4", "n": "THE NAZO STORE", "a": "Ba・Bbブース"}, {"b": "Bb5", "n": "ナゾグラ by ClaGla", "a": "Ba・Bbブース"}, {"b": "Bb6", "n": "NAZO×NAZO劇団", "a": "Ba・Bbブース"}, {"b": "Bb7", "n": "タカラッシュ！", "a": "Ba・Bbブース"}, {"b": "Bb8", "n": "NazoLock", "a": "Ba・Bbブース"}, {"b": "Bb9", "n": "謎組", "a": "Ba・Bbブース"}, {"b": "Ca1", "n": "Coda!", "a": "Caブース"}, {"b": "Ca2", "n": "秋山クリエイト", "a": "Caブース"}, {"b": "Ca3", "n": "朝灼けリパブリック", "a": "Caブース"}, {"b": "Ca4", "n": "MICHI", "a": "Caブース"}, {"b": "Ca5", "n": "シネマトリック", "a": "Caブース"}, {"b": "Ca6", "n": "AnotherVision", "a": "Caブース"}, {"b": "Ca7", "n": "広島大学ナゾサークル おにラビ", "a": "Caブース"}, {"b": "Ca8", "n": "謎解きサークル NULOCK", "a": "Caブース"}, {"b": "Ca9", "n": "Xcape", "a": "Caブース"}, {"b": "Ca10", "n": "ENIG-ROID", "a": "Caブース"}, {"b": "Ca11", "n": "TokiToki escapecafe", "a": "Caブース"}, {"b": "Ca12", "n": "ミステリーカフェ謎屋珈琲店", "a": "Caブース"}, {"b": "Ca13", "n": "JOKER PROJECT", "a": "Caブース"}, {"b": "Ca14", "n": "五月のカワセミ", "a": "Caブース"}, {"b": "Ca15", "n": "ナゾトキアドベンチャー", "a": "Caブース"}, {"b": "Ca16", "n": "0001（ゼロイチ）", "a": "Caブース"}, {"b": "Ca17", "n": "滋賀県謎解きチーム リドレイク", "a": "Caブース"}, {"b": "Ca18", "n": "ナゾトキ番長", "a": "Caブース"}, {"b": "Ca19", "n": "チャンズファクトリー＋うーベー", "a": "Caブース"}, {"b": "Ca20", "n": "？無策師？", "a": "Caブース"}, {"b": "Cb1", "n": "sukuranburu", "a": "Cbブース"}, {"b": "Cb2", "n": "謎文具キツツキ堂", "a": "Cbブース"}, {"b": "Cb3", "n": "祝井ゆん/NEPPA", "a": "Cbブース"}, {"b": "Cb4", "n": "あまつパイセン", "a": "Cbブース"}, {"b": "Cb5", "n": "K-dush2", "a": "Cbブース"}, {"b": "Cb6", "n": "C-lock-row", "a": "Cbブース"}, {"b": "Cb7", "n": "F-enigma", "a": "Cbブース"}, {"b": "Cb8", "n": "埼玉大学 site：Arcana", "a": "Cbブース"}, {"b": "Cb9", "n": "return 0;", "a": "Cbブース"}, {"b": "Cb10", "n": "ハードナッツ", "a": "Cbブース"}, {"b": "Cb11", "n": "Tri Möbius（トライメビウス）", "a": "Cbブース"}, {"b": "Cb12", "n": "TERRA NOVA", "a": "Cbブース"}, {"b": "Cb13", "n": "たぬき探偵ジェリー", "a": "Cbブース"}, {"b": "Cb14", "n": "MOVIE ROCK", "a": "Cbブース"}, {"b": "Cb15", "n": "NoEscape", "a": "Cbブース"}, {"b": "Cb16", "n": "みかん箱&Toy×ボーズ&エレメンツ", "a": "Cbブース"}, {"b": "Cb17", "n": "CrossXOne", "a": "Cbブース"}, {"b": "Cb18", "n": "MOT!&pintoLab&なぞねこ", "a": "Cbブース"}, {"b": "Cb19", "n": "ShareKOBE", "a": "Cbブース"}, {"b": "Cb20", "n": "グータン森山", "a": "Cbブース"}, {"b": "Cc1", "n": "ああああああああ", "a": "Ccブース"}, {"b": "Cc2", "n": "あき03Xteaparty", "a": "Ccブース"}, {"b": "Cc3", "n": "N@ZO LAB.", "a": "Ccブース"}, {"b": "Cc4", "n": "ミステリージャック", "a": "Ccブース"}, {"b": "Cc5", "n": "きまぐれボックス", "a": "Ccブース"}, {"b": "Cc6", "n": "4CE Dimension ＆ TRIQLET", "a": "Ccブース"}, {"b": "Cc6", "n": "WHYNU", "a": "Ccブース"}, {"b": "Cc7", "n": "EscaPLUGGED", "a": "Ccブース"}, {"b": "Cc7", "n": "シングルズ＆成田高校クイズ研究部", "a": "Ccブース"}, {"b": "Cc8", "n": "Calette", "a": "Ccブース"}, {"b": "Cc9", "n": "作人", "a": "Ccブース"}, {"b": "Cc10", "n": "RI:Works", "a": "Ccブース"}, {"b": "Cc11", "n": "早稲田大学謎解き企画algo", "a": "Ccブース"}, {"b": "Cc12", "n": "CrazyLemon", "a": "Ccブース"}, {"b": "Cc13", "n": "RiddleTimez", "a": "Ccブース"}, {"b": "Cc14", "n": "文目（あやめ） ラ・シタデール", "a": "Ccブース"}, {"b": "Cc15", "n": "ハテナボックス／百兎秋", "a": "Ccブース"}, {"b": "Cc16", "n": "ミステリーケーキ", "a": "Ccブース"}, {"b": "Cc17", "n": "SBGC", "a": "Ccブース"}, {"b": "Cc18", "n": "Flambeur's Coin", "a": "Ccブース"}, {"b": "Cc19", "n": "NazoGram", "a": "Ccブース"}, {"b": "Cc20", "n": "九十九萬屋", "a": "Ccブース"}, {"b": "Cc21", "n": "Sheep Rhythm", "a": "Ccブース"}, {"b": "Cd1", "n": "きりんぐたいむに象の群れ＆３年え組", "a": "Cdブース"}, {"b": "Cd2", "n": "夕立工房", "a": "Cdブース"}, {"b": "Cd3", "n": "Primalade / プライマレード", "a": "Cdブース"}, {"b": "Cd4", "n": "あかずきん", "a": "Cdブース"}, {"b": "Cd5", "n": "鯨井翔", "a": "Cdブース"}, {"b": "Ce1", "n": "PADDLE", "a": "Ceブース"}, {"b": "Ce2", "n": "NAZONE", "a": "Ceブース"}, {"b": "Ce3", "n": "髭とニチョ謎", "a": "Ceブース"}, {"b": "Ce4", "n": "iMY", "a": "Ceブース"}, {"b": "Ce5", "n": "立川茜＆なぞる", "a": "Ceブース"}];
+const nz = t => String(t || "").normalize("NFKC").toLowerCase().replace(/[\s!?()\[\]・.,'"\-ー_\/＆&@]/g, "");
+const bnames = BOOTHS.map(x => ({ ...x, k: nz(x.n), parts: x.n.normalize("NFKC").split(/[\/＆&＋+×]/).map(nz).filter(p => p.length >= 2) }));
+let autoVal = "";
+function findBooth(g, fuzzy = true) {
+  const k = nz(g); if (!k) return "";
+  const ex = bnames.filter(x => x.k === k || x.parts.includes(k));
+  if (ex.length) return ex[0].b;
+  const sib = items.find(i => nz(i.group) === k && i.booth);
+  if (sib) return sib.booth;
+  if (!fuzzy || k.length < 2) return "";
+  const fz = bnames.filter(x => x.k.includes(k) || (x.k.length >= 3 && k.includes(x.k)) || x.parts.some(p => p.includes(k)));
+  return fz.length === 1 ? fz[0].b : "";
+}
+function autoBooth(fuzzy) {
+  const b = findBooth($("grp").value, fuzzy);
+  if (b && (!$("bt").value || $("bt").value === autoVal)) { $("bt").value = b; autoVal = b; $("exh").textContent = "ブース " + b + " を自動入力しました。"; }
+}
+$("grp").addEventListener("input", () => autoBooth(false));
+$("grp").addEventListener("change", () => autoBooth(true));
+
+function showBooth() {
+  const g = $("bsel").value;
+  if (!g) { $("bres").innerHTML = `<div class="hint">団体を選ぶと、ブース番号が表示されます。</div>`; return; }
+  const code = findBooth(g, false);
+  const its = items.filter(i => nz(i.group) === nz(g));
+  $("bres").innerHTML = `<div class="bhit"><b>${esc(g)}</b><b>${code ? "📍 " + esc(code) : "ブース未定"}</b></div>` +
+    its.map(i => `<div class="bhit"><span>${esc(i.name)}（${esc(i.who)}）</span><span>×${i.qty}</span></div>`).join("");
+}
+function renderBoothList() {
+  const q = nz($("bq").value);
+  const mine = new Set(items.map(i => nz(i.group)));
+  let last = "", html = "";
+  for (const x of bnames) {
+    if (q && !x.k.includes(q) && !nz(x.b).includes(q)) continue;
+    if (x.a !== last) { html += `<div class="hint" style="margin-top:12px;font-weight:700;color:var(--lav-d)">${esc(x.a)}</div>`; last = x.a; }
+    html += `<div class="bhit"><span>${mine.has(x.k) ? "🛍 " : ""}${esc(x.n)}</span><b>${esc(x.b)}</b></div>`;
   }
-  return out;
+  $("blist").innerHTML = html || `<div class="hint">見つかりませんでした。</div>`;
 }
-function findBooth(g) {
-  const k = nz(g); if (k.length < 2) return "";
-  const hit = boothList.find(b => nz(b.name) === k) || boothList.find(b => { const n = nz(b.name); return n.length >= 2 && (n.includes(k) || k.includes(n)); });
-  return hit ? hit.booth : "";
-}
-function autoBooth() {
-  const b = findBooth($("grp").value);
-  if (b && !$("bt").value) { $("bt").value = b; $("exh").textContent = "ブース " + b + " を自動入力しました。"; }
-}
-$("grp").addEventListener("change", autoBooth);
-
-if (listId) {
-  const bref = doc(db, "lists", listId, "booths", "map");
-  try { boothList = JSON.parse(localStorage.getItem("booths:" + listId) || "[]"); } catch (e) {}
-  onSnapshot(bref, s => {
-    if (s.exists()) { try { boothList = JSON.parse(s.data().json || "[]"); localStorage.setItem("booths:" + listId, s.data().json); } catch (e) {} }
-    render(); searchBooth();
-  }, () => {});
-
-  function searchBooth() {
-    const k = nz($("bsearch").value);
-    if (!k) { $("bres").innerHTML = boothList.length ? `<div class="hint">${boothList.length}団体のブース情報があります。</div>` : `<div class="hint">ブース一覧が未登録です。下の「取り込む」から登録してください。</div>`; return; }
-    const hits = boothList.filter(b => nz(b.name).includes(k)).slice(0, 8);
-    $("bres").innerHTML = hits.length ? hits.map(b => `<div class="bhit"><span>${esc(b.name)}</span><b>📍 ${esc(b.booth)}</b></div>`).join("") : `<div class="hint">見つかりませんでした。</div>`;
+$("bq").addEventListener("input", renderBoothList);
+function fillGroups() {
+  const names = BOOTHS.map(x => x.n);
+  const extra = [...new Set(items.map(i => i.group).filter(g => g && !bnames.some(x => x.k === nz(g))))];
+  $("grplist").innerHTML = [...names, ...extra].map(g => `<option value="${esc(g)}">`).join("");
+  const cur = $("bsel").value;
+  let h = '<option value="">団体名を選択</option>', area = "";
+  for (const x of BOOTHS) {
+    if (x.a !== area) { if (area) h += "</optgroup>"; h += `<optgroup label="${esc(x.a)}">`; area = x.a; }
+    h += `<option value="${esc(x.n)}">${esc(x.n)}（${esc(x.b)}）</option>`;
   }
-  $("bsearch").addEventListener("input", searchBooth);
-
-  $("bsave").onclick = async () => {
-    const add = parseBooths($("bimp").value);
-    if (!add.length) { $("bst").textContent = "読み取れませんでした。「ブース番号 団体名」を1行ずつ貼ってください。"; return; }
-    const m = new Map(boothList.map(b => [nz(b.name), b])); add.forEach(b => m.set(nz(b.name), b));
-    boothList = [...m.values()];
-    const json = JSON.stringify(boothList);
-    try { localStorage.setItem("booths:" + listId, json); } catch (e) {}
-    try { await setDoc(bref, { json, t: Date.now() }); $("bst").textContent = add.length + "件を取り込みました（共有済み）。"; }
-    catch (e) { $("bst").textContent = add.length + "件を取り込みました（この端末のみ。Firestoreのルールを更新すると共有できます）。"; }
-    $("bimp").value = ""; render(); searchBooth();
-  };
-  $("bfill").onclick = async () => {
-    let n = 0;
-    for (const i of items) { if (!i.booth) { const b = findBooth(i.group); if (b) { await updateDoc(doc(db, "lists", listId, "items", i.id), { booth: b }).catch(() => {}); n++; } } }
-    $("bst").textContent = n ? n + "件のブースを入力しました。" : "当てはまる団体が見つかりませんでした。";
-  };
-  searchBooth();
+  $("bsel").innerHTML = h + "</optgroup>";
+  $("bsel").value = cur;
+  $("bsum").textContent = "📋 ブース一覧（全" + BOOTHS.length + "団体）";
+  showBooth(); renderBoothList();
 }
+$("bsel").onchange = showBooth;
 
 render();
 </script>
