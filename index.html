@@ -162,19 +162,30 @@ $("share").onclick = async () => {
 
 /* ポストからの簡易抽出（ルールベース） */
 $("ex").onclick = () => {
-  const t = $("post").value.trim();
-  if (!t) { $("exh").textContent = "ポスト本文を貼り付けてください。"; return; }
-  const lines = t.split(/\n/).map(s => s.trim()).filter(s => s && !/^https?:/.test(s));
-  const acc = (t.match(/@[A-Za-z0-9_]+/) || [""])[0];
-  const grpM = t.match(/(?:団体名?|サークル名?|頒布元)\s*[:：]\s*(.+)/);
-  const prodM = t.match(/[「『](.+?)[」』]/) || t.match(/(?:商品名?|タイトル)\s*[:：]\s*(.+)/);
+  const raw = $("post").value.trim();
+  if (!raw) { $("exh").textContent = "ポスト本文を貼り付けてください。"; return; }
+  const urlUser = (raw.match(/(?:x|twitter)\.com\/([A-Za-z0-9_]+)\/status/) || [])[1];
+  const t = raw.replace(/https?:\/\/\S+/g, "").trim();
+  const lines = t.split(/\n/).map(s => s.trim()).filter(Boolean);
+  const mention = (t.match(/@[A-Za-z0-9_]+/) || [""])[0];
+  const acc = mention || (urlUser ? "@" + urlUser : "");
+  const generic = /^(新刊|新作|新商品|頒布|告知|お品書き|おしながき|通販|予約|発売|参加|ブース|情報|お知らせ|拡散|RT|謎解き|謎解きマーケット|当日|事前)/;
+  const grpM = t.match(/(?:団体名?|サークル名?|頒布元|出展者?)\s*[:：]\s*(.+)/);
+  const labelProd = t.match(/(?:商品名?|タイトル|作品名?)\s*[:：]\s*(.+)/);
+  const quoted = t.match(/[「『](.+?)[」』]/);
+  const bracket = [...t.matchAll(/【(.+?)】/g)].map(m => m[1]).find(x => !generic.test(x));
+  const firstLine = (lines.find(l => !/^[#@]/.test(l)) || "").replace(/^[【\[].*?[】\]]\s*/, "");
   const priceM = t.match(/(?:[¥￥]\s*([\d,]+))|(?:([\d,]+)\s*円)/);
-  const boothM = t.match(/(?:ブース|booth|配置)\s*[:：]?\s*([A-Za-zＡ-Ｚ0-9０-９\-ー]+)/i);
-  $("grp").value = grpM ? grpM[1].trim() : (acc || "");
-  $("pn").value = prodM ? prodM[1].trim() : (lines[0] || "").slice(0, 40);
+  const boothM = t.match(/(?:ブース|booth|配置|スペース)\s*[:：]?\s*([A-Za-zＡ-Ｚ0-9０-９\-ー]+)/i) || t.match(/\b([A-Za-zあ-ん]{1,2}[-ー]\d{1,3})\b/);
+  const prod = (quoted && quoted[1]) || (labelProd && labelProd[1]) || bracket || firstLine;
+  $("grp").value = grpM ? grpM[1].trim() : acc;
+  $("pn").value = (prod || "").trim().slice(0, 50);
   if (priceM) $("pr").value = (priceM[1] || priceM[2]).replace(/,/g, "");
   if (boothM) $("bt").value = boothM[1];
-  $("exh").textContent = "抽出しました。内容を確認・修正してください。";
+  const only = !t && urlUser;
+  $("exh").textContent = only
+    ? "URLだけでは本文を読めないため、ユーザー名のみ入れました。ポストの文章もコピーして貼ると、商品名も取れます。"
+    : "抽出しました。内容を確認・修正してください。";
 };
 
 function render() {
